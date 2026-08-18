@@ -311,8 +311,7 @@ export const SunsetFlightVideo: React.FC<SunsetFlightVideoProps> = ({
         playsInline
         onLoadedData={() => setVideoLoaded(true)}
       >
-        <source src="/sunset-clouds.mp4" type="video/mp4" />
-        <source src="/sunset-flight.mp4" type="video/mp4" />
+        <source src="/hero-video.mp4" type="video/mp4" />
       </video>
 
       {/* Ultra High Resolution Procedural Canvas Visualizer */}

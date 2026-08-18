@@ -20,6 +20,13 @@ import {
   RotateCcw
 } from 'lucide-react';
 
+const ASSET_BASE_PATH = "/";
+const HERO_VIDEO_SRC = `${ASSET_BASE_PATH}hero-video.mp4`;
+const DIRECT_HERO_VIDEO_SRC = "https://cdn.sceneai.art/Hero%20Section%20Video/01d1f8de-fec0-4bf5-8b48-9fc2dbc8c6b0.mp4";
+const BACKGROUND_VIDEO_SOURCES = [
+  HERO_VIDEO_SRC,
+];
+
 export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<string | null>(null);
@@ -32,16 +39,19 @@ export default function App() {
   // Interactive Mouse Scroll Takeoff Sequence from the beginning
   const [firstVideoFinished, setFirstVideoFinished] = useState(false);
   const [elementsDescended, setElementsDescended] = useState(false);
-  const [scrubProgress, setScrubProgress] = useState(0); // 0 to 1
-  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [introVideoUnavailable, setIntroVideoUnavailable] = useState(false);
 
   const video1Ref = useRef<HTMLVideoElement>(null);
+  const backgroundVideoRef = useRef<HTMLVideoElement>(null);
   const touchStartY = useRef<number>(0);
   const targetScrubProgress = useRef<number>(0);
   const currentScrubProgress = useRef<number>(0);
   const rafId = useRef<number | null>(null);
+  const lastSeekAt = useRef<number>(0);
+  const seekInFlight = useRef(false);
+  const transitionStarted = useRef(false);
+  const backgroundSourceIndex = useRef(0);
 
-  const directVideoUrl = "https://cdn.sceneai.art/Hero%20Section%20Video/01d1f8de-fec0-4bf5-8b48-9fc2dbc8c6b0.mp4";
 
   // Form state for exploration / trip planner modal
   const [destination, setDestination] = useState('Kyoto, Japan');
@@ -52,26 +62,40 @@ export default function App() {
 
   // Complete takeoff and transition to full site
   const completeTakeoffTransition = useCallback(() => {
+    if (transitionStarted.current) return;
+
+    transitionStarted.current = true;
     setFirstVideoFinished(true);
-    setScrubProgress(1);
     targetScrubProgress.current = 1;
     currentScrubProgress.current = 1;
-    setTimeout(() => {
+    seekInFlight.current = false;
+
+    const backgroundVideo = backgroundVideoRef.current;
+    if (backgroundVideo) {
+      void backgroundVideo.play().catch(() => undefined);
+    }
+
+    window.setTimeout(() => {
       setElementsDescended(true);
     }, 200);
   }, []);
 
   // Replay the interactive scroll entrance from the beginning
   const replayTakeoff = () => {
+    transitionStarted.current = false;
     setFirstVideoFinished(false);
     setElementsDescended(false);
-    setScrubProgress(0);
+    setIntroVideoUnavailable(false);
     targetScrubProgress.current = 0;
     currentScrubProgress.current = 0;
+    lastSeekAt.current = 0;
+    seekInFlight.current = false;
+
     if (video1Ref.current) {
       video1Ref.current.pause();
       video1Ref.current.currentTime = 0;
     }
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -80,41 +104,67 @@ export default function App() {
     completeTakeoffTransition();
   };
 
-  // Silky Smooth 30fps+ RAF Loop with Adaptive Lerp for Video Scrubbing
+  const resumeBackgroundVideo = useCallback(() => {
+    const backgroundVideo = backgroundVideoRef.current;
+    if (backgroundVideo && backgroundVideo.paused) {
+      void backgroundVideo.play().catch(() => undefined);
+    }
+  }, []);
+
+  const handleBackgroundVideoError = useCallback(() => {
+    const backgroundVideo = backgroundVideoRef.current;
+    const nextSourceIndex = backgroundSourceIndex.current + 1;
+
+    if (!backgroundVideo || nextSourceIndex >= BACKGROUND_VIDEO_SOURCES.length) return;
+
+    backgroundSourceIndex.current = nextSourceIndex;
+    backgroundVideo.src = BACKGROUND_VIDEO_SOURCES[nextSourceIndex];
+    backgroundVideo.load();
+    void backgroundVideo.play().catch(() => undefined);
+  }, []);
+
+  const handleIntroVideoError = useCallback(() => {
+    setIntroVideoUnavailable(true);
+    completeTakeoffTransition();
+  }, [completeTakeoffTransition]);
+
+  // Smooth scrub loop. Progress is interpolated every animation frame, while
+  // seeks are throttled and gated so the browser never decodes overlapping jumps.
   useEffect(() => {
-    if (firstVideoFinished) {
+    if (firstVideoFinished || introVideoUnavailable) {
       if (rafId.current) cancelAnimationFrame(rafId.current);
       return;
     }
 
     let lastFrameTime = performance.now();
-    const targetFpsInterval = 1000 / 30; // 30 frames per second timing target
 
-    const smoothVideoPlayback = (currentTimeMs: number) => {
-      const elapsed = currentTimeMs - lastFrameTime;
+    const smoothVideoPlayback = (now: number) => {
+      const elapsed = Math.min(now - lastFrameTime, 64);
+      lastFrameTime = now;
 
       const diff = targetScrubProgress.current - currentScrubProgress.current;
-      
-      if (Math.abs(diff) > 0.0002) {
-        // Smooth exponential damping
-        currentScrubProgress.current += diff * 0.14;
-        setScrubProgress(currentScrubProgress.current);
+      if (Math.abs(diff) > 0.0001) {
+        const easing = 1 - Math.exp(-8.5 * (elapsed / 1000));
+        currentScrubProgress.current += diff * easing;
+      }
 
-        if (elapsed >= targetFpsInterval || Math.abs(diff) > 0.01) {
-          lastFrameTime = currentTimeMs - (elapsed % targetFpsInterval);
-          if (video1Ref.current && video1Ref.current.duration) {
-            const duration = video1Ref.current.duration;
-            const targetTime = currentScrubProgress.current * duration;
-            video1Ref.current.currentTime = Math.min(
-              Math.max(0, targetTime), 
-              duration - 0.02
-            );
-          }
+      const video = video1Ref.current;
+      if (video && Number.isFinite(video.duration) && video.duration > 0) {
+        const targetTime = Math.min(
+          Math.max(0, currentScrubProgress.current * video.duration),
+          Math.max(0, video.duration - 0.02),
+        );
+        const timeDifference = Math.abs(targetTime - video.currentTime);
+        const canSeek = !seekInFlight.current && now - lastSeekAt.current >= 42;
+
+        if (canSeek && timeDifference >= 0.025) {
+          seekInFlight.current = true;
+          lastSeekAt.current = now;
+          video.currentTime = targetTime;
         }
       }
 
-      // When reaching near the end (entering through the window into the sky)
-      if (currentScrubProgress.current >= 0.955) {
+      if (currentScrubProgress.current >= 0.985 && targetScrubProgress.current >= 0.99) {
         completeTakeoffTransition();
         return;
       }
@@ -127,7 +177,7 @@ export default function App() {
     return () => {
       if (rafId.current) cancelAnimationFrame(rafId.current);
     };
-  }, [firstVideoFinished, completeTakeoffTransition]);
+  }, [firstVideoFinished, introVideoUnavailable, completeTakeoffTransition]);
 
   // Handle Mouse Wheel and Touch Scroll during Takeoff entrance
   useEffect(() => {
@@ -137,13 +187,16 @@ export default function App() {
       if (firstVideoFinished) return;
 
       e.preventDefault();
-      setIsScrubbing(true);
 
-      const delta = e.deltaY;
-      const sensitivity = 0.0011;
+      const delta = e.deltaMode === 1
+        ? e.deltaY * 16
+        : e.deltaMode === 2
+          ? e.deltaY * window.innerHeight
+          : e.deltaY;
+      const sensitivity = 0.0008;
       targetScrubProgress.current = Math.min(
-        Math.max(0, targetScrubProgress.current + delta * sensitivity), 
-        1
+        Math.max(0, targetScrubProgress.current + delta * sensitivity),
+        1,
       );
     };
 
@@ -157,13 +210,12 @@ export default function App() {
       const deltaY = touchStartY.current - touchY;
       touchStartY.current = touchY;
 
-      if (deltaY > 0) {
+      if (Math.abs(deltaY) > 0.1) {
         e.preventDefault();
-        setIsScrubbing(true);
-        const sensitivity = 0.0028;
+        const sensitivity = 0.0022;
         targetScrubProgress.current = Math.min(
-          Math.max(0, targetScrubProgress.current + deltaY * sensitivity), 
-          1
+          Math.max(0, targetScrubProgress.current + deltaY * sensitivity),
+          1,
         );
       }
     };
@@ -342,9 +394,13 @@ export default function App() {
             muted
             playsInline
             preload="auto"
+            onSeeked={() => {
+              seekInFlight.current = false;
+            }}
+            onError={handleIntroVideoError}
           >
-            <source src="/hero-video.mp4" type="video/mp4" />
-            <source src={directVideoUrl} type="video/mp4" />
+            <source src={HERO_VIDEO_SRC} type="video/mp4" />
+            <source src={DIRECT_HERO_VIDEO_SRC} type="video/mp4" />
           </video>
         </div>
 
@@ -355,17 +411,18 @@ export default function App() {
           }`}
         >
           <video
+            ref={backgroundVideoRef}
             className="w-full h-full object-cover scale-100"
             autoPlay
             loop
             muted
             playsInline
             preload="auto"
-          >
-            <source src="/Person_recording_airplane_window.mp4" type="video/mp4" />
-            <source src="/sunset-window-1080p.mp4" type="video/mp4" />
-            <source src="/sunset-video.mp4" type="video/mp4" />
-          </video>
+            src={BACKGROUND_VIDEO_SOURCES[0]}
+            onCanPlay={resumeBackgroundVideo}
+            onLoadedData={resumeBackgroundVideo}
+            onError={handleBackgroundVideoError}
+          />
         </div>
 
         {/* Cinematic translucent atmospheric gradient overlay */}
