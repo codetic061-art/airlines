@@ -21,10 +21,10 @@ import {
 } from 'lucide-react';
 
 const ASSET_BASE_PATH = "/";
-const HERO_VIDEO_SRC = `${ASSET_BASE_PATH}hero-video.mp4`;
-const DIRECT_HERO_VIDEO_SRC = "https://cdn.sceneai.art/Hero%20Section%20Video/01d1f8de-fec0-4bf5-8b48-9fc2dbc8c6b0.mp4";
+const SCROLL_VIDEO_SRC = `${ASSET_BASE_PATH}scroll-video.mp4`;
+const DIRECT_SCROLL_VIDEO_SRC = "https://cdn.sceneai.art/Hero%20Section%20Video/01d1f8de-fec0-4bf5-8b48-9fc2dbc8c6b0.mp4";
 const BACKGROUND_VIDEO_SOURCES = [
-  HERO_VIDEO_SRC,
+  `${ASSET_BASE_PATH}main-zone-background.mp4`,
 ];
 
 export default function App() {
@@ -48,7 +48,6 @@ export default function App() {
   const currentScrubProgress = useRef<number>(0);
   const rafId = useRef<number | null>(null);
   const lastSeekAt = useRef<number>(0);
-  const seekInFlight = useRef(false);
   const transitionStarted = useRef(false);
   const backgroundSourceIndex = useRef(0);
 
@@ -68,7 +67,6 @@ export default function App() {
     setFirstVideoFinished(true);
     targetScrubProgress.current = 1;
     currentScrubProgress.current = 1;
-    seekInFlight.current = false;
 
     const backgroundVideo = backgroundVideoRef.current;
     if (backgroundVideo) {
@@ -89,7 +87,6 @@ export default function App() {
     targetScrubProgress.current = 0;
     currentScrubProgress.current = 0;
     lastSeekAt.current = 0;
-    seekInFlight.current = false;
 
     if (video1Ref.current) {
       video1Ref.current.pause();
@@ -155,10 +152,9 @@ export default function App() {
           Math.max(0, video.duration - 0.02),
         );
         const timeDifference = Math.abs(targetTime - video.currentTime);
-        const canSeek = !seekInFlight.current && now - lastSeekAt.current >= 42;
+        const canSeek = now - lastSeekAt.current >= 50;
 
-        if (canSeek && timeDifference >= 0.025) {
-          seekInFlight.current = true;
+        if (canSeek && timeDifference >= 0.012) {
           lastSeekAt.current = now;
           video.currentTime = targetTime;
         }
@@ -394,13 +390,10 @@ export default function App() {
             muted
             playsInline
             preload="auto"
-            onSeeked={() => {
-              seekInFlight.current = false;
-            }}
             onError={handleIntroVideoError}
           >
-            <source src={HERO_VIDEO_SRC} type="video/mp4" />
-            <source src={DIRECT_HERO_VIDEO_SRC} type="video/mp4" />
+            <source src={SCROLL_VIDEO_SRC} type="video/mp4" />
+            <source src={DIRECT_SCROLL_VIDEO_SRC} type="video/mp4" />
           </video>
         </div>
 
@@ -1050,7 +1043,7 @@ export default function App() {
               <button onClick={() => setActiveModal('Services')} className="hover:text-white cursor-pointer transition-colors">Services</button>
               <button onClick={() => setActiveModal('Support')} className="hover:text-white cursor-pointer transition-colors">Concierge</button>
               <span className="text-white/40">•</span>
-              <span>© 2026 Airlines Global Inc.</span>
+              <span>© 2026 Mina Medhat Fawzy. All rights reserved. Designed by Mina Medhat Fawzy.</span>
             </div>
           </div>
         </footer>
