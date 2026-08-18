@@ -1,0 +1,8 @@
+{
+  "name": "Remix Airlines - Cinematic Travel Experience",
+  "description": "A luxury cinematic travel landing page with full-screen video experience and seamless exploration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
