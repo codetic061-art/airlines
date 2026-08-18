@@ -22,7 +22,6 @@ import {
 
 const ASSET_BASE_PATH = "/";
 const SCROLL_VIDEO_SRC = `${ASSET_BASE_PATH}scroll-video.mp4`;
-const DIRECT_SCROLL_VIDEO_SRC = "https://cdn.sceneai.art/Hero%20Section%20Video/01d1f8de-fec0-4bf5-8b48-9fc2dbc8c6b0.mp4";
 const BACKGROUND_VIDEO_SOURCES = [
   `${ASSET_BASE_PATH}main-zone-background.mp4`,
 ];
@@ -393,7 +392,6 @@ export default function App() {
             onError={handleIntroVideoError}
           >
             <source src={SCROLL_VIDEO_SRC} type="video/mp4" />
-            <source src={DIRECT_SCROLL_VIDEO_SRC} type="video/mp4" />
           </video>
         </div>
 
